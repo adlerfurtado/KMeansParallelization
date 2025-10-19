@@ -6,19 +6,18 @@ How to use:
 
 cd KMeansParallelization
 
-
 2. Build all versions
 Compile all implementations (Sequential, OpenMP, and CUDA):
 
 make 
 
-This will create these executables:
-bin/kmeans_seq
-bin/kmeans_omp
-bin/kmeans_cuda
+This will create these executables: 
+- bin/kmeans_seq
+- bin/kmeans_omp
+- bin/kmeans_cuda
 
 3. Run the Sequential version
 
 make run-seq ARGS="data/points.txt 3"
 
-(Estou usando o 3 depois de points.txt por enquanto pois estou testando com 3 clusters)
+(I'm using this command for now beacuse i'm testing with 3 clusters)
