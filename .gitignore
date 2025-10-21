@@ -1,0 +1,6 @@
+# Generated files
+bin/
+
+# Visual Studio files
+.vs/
+.vscode/
