@@ -1,44 +1,13 @@
+#include "common.h"
 #include <iostream>
-#include <vector>
 #include <cmath>
-#include <cstdlib>
-#include <fstream>
-#include <string>
 
-#include <omp.h>
-
-using namespace std;
-
-// Estrutura para representar um ponto (x, y)
-struct Point {
-    double x, y;
-    int cluster;  // índice do centróide mais próximo
-};
-
-// Estrutura para representar um centróide
-struct Centroid {
-    double x, y;
-};
-
-// Função para calcular distância Euclidiana
-double distance(const Point& a, const Centroid& b) {
-    return sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
-}
-
-// Função para inicializar centróides aleatoriamente
-vector<Centroid> initialize_centroids(const vector<Point>& points, int k) {
-    vector<Centroid> centroids;
-    for (int i = 0; i < k; ++i) {
-        int idx = rand() % points.size();
-        centroids.push_back({points[idx].x, points[idx].y});
-    }
-    return centroids;
-}
-
-// Função principal do K-Means
-void kmeans_omp(vector<Point>& points, int k, int max_iters = 10) {
+// K-Means paralelizado com OpenMP
+vector<Centroid> kmeans_omp(vector<Point>& points, vector<Centroid>& initial_centroids, int max_iters) {
     int n = points.size();
-    vector<Centroid> centroids = initialize_centroids(points, k);
+    int k = initial_centroids.size();
+    vector<Centroid> centroids = initial_centroids;
+    // vector<Centroid> centroids = initialize_centroids(points, k);
 
     for (int iter = 0; iter < max_iters; ++iter) {
         int total_changed = 0;
@@ -85,7 +54,7 @@ void kmeans_omp(vector<Point>& points, int k, int max_iters = 10) {
             }
 
             // Fusão das reduções locais → globais
-            #pragma omp critical
+            #pragma omp critical  // critical: Especifica que o código só é executado em um thread por vez.
             {
                 for (int c = 0; c < k; ++c) {
                     global_sum_x[c] += local_sum_x[c];
@@ -106,61 +75,11 @@ void kmeans_omp(vector<Point>& points, int k, int max_iters = 10) {
 
         // Etapa 3: Verificação de convergência
         if (total_changed == 0) {
-            cout << "Convergência alcançada na iteração " << iter + 1 << ".\n";
+            // cout << "Convergiu em " << iter << " iterações.\n";
             break;
         }
 
     }
 
-    // Mostrar resultado final
-    for (int j = 0; j < k; ++j) {
-        cout << "Centróide " << j << ": (" << centroids[j].x << ", " << centroids[j].y << ")\n";
-    }
-}
-
-// Função para ler pontos de um arquivo
-vector<Point> read_points(const string& filename) {
-    vector<Point> points;
-    ifstream file(filename);
-
-    if (!file.is_open()) {
-        cerr << "Erro ao abrir o arquivo: " << filename << endl;
-        exit(1);
-    }
-
-    double x, y;
-    while (file >> x >> y) {
-        points.push_back({x, y, -1});
-    }
-
-    if (points.empty()) {
-        cerr << "Nenhum ponto encontrado no arquivo." << endl;
-        exit(1);
-    }
-
-    return points;
-}
-
-int main(int argc, char* argv[]) {
-    if (argc < 3) {
-        cout << "Uso: ./kmeans_seq <arquivo_dados> <k>\n";
-        cout << "Exemplo: ./kmeans_seq data/points.txt 3\n";
-        return 1;
-    }
-
-    string filename = argv[1];
-    int k = stoi(argv[2]);
-
-    srand(time(NULL));
-
-    vector<Point> points = read_points(filename);
-
-    double t0 = omp_get_wtime();
-    kmeans_omp(points, k);
-    double t1 = omp_get_wtime();
-
-    cout << "Tempo total: " << (t1 - t0) << " segundos." << endl;
-    cout << "Threads usadas: " << omp_get_max_threads() << endl;
-
-    return 0;
+    return centroids;
 }

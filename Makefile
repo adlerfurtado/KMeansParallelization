@@ -1,86 +1,56 @@
-# ====================================
-# Compiladores
-# ====================================
+# Compiler and flags
 CXX = g++
+CXXFLAGS = -O3 -Wall -fopenmp -std=c++17
+
+# CUDA (future support)
 NVCC = nvcc
+NVCCFLAGS = -O3 -std=c++17
 
-# ====================================
-# Flags de compilação
-# ====================================
-CXXFLAGS = -O2 -Wall
-OMPFLAGS = -fopenmp
-CUDAFLAGS = -O2
-
-# ====================================
-# Pastas
-# ====================================
+# Directories
 SRC_DIR = src
+OBJ_DIR = obj
 BIN_DIR = bin
-DATA_DIR = data
 
-# ====================================
-# Arquivos-fonte
-# ====================================
-SEQ_SRC = $(SRC_DIR)/kmeans_seq.cpp
-OMP_SRC = $(SRC_DIR)/kmeans_omp.cpp
-CUDA_SRC = $(SRC_DIR)/kmeans_cuda.cu
+# Sources and objects
+SRC = $(SRC_DIR)/main.cpp \
+      $(SRC_DIR)/kmeans_seq.cpp \
+      $(SRC_DIR)/kmeans_omp.cpp \
+      $(SRC_DIR)/common.cpp
+OBJ = $(addprefix $(OBJ_DIR)/, $(notdir $(SRC:.cpp=.o)))
 
-# ====================================
-# Executáveis
-# ====================================
-SEQ_EXE = $(BIN_DIR)/kmeans_seq
-OMP_EXE = $(BIN_DIR)/kmeans_omp
-CUDA_EXE = $(BIN_DIR)/kmeans_cuda
+# Executable
+TARGET = $(BIN_DIR)/kmeans
 
-# ====================================
-# Criação de pastas
-# ====================================
-$(BIN_DIR):
-	mkdir -p $(BIN_DIR)
+# Default rule
+all: prepare $(TARGET)
 
-$(DATA_DIR):
-	mkdir -p $(DATA_DIR)
+# Create directories if not exist
+prepare:
+	mkdir -p $(OBJ_DIR) $(BIN_DIR)
 
-# ====================================
-# Compilação
-# ====================================
-all: $(SEQ_EXE) $(OMP_EXE) $(CUDA_EXE)
+# Link
+$(TARGET): $(OBJ)
+	$(CXX) $(CXXFLAGS) -o $@ $^
 
-# Versão sequencial
-$(SEQ_EXE): $(SEQ_SRC) | $(BIN_DIR)
-	$(CXX) $(CXXFLAGS) -o $@ $<
+# Compile object files into obj/
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp src/common.h src/CycleTimer.h
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Versão paralela (OpenMP)
-$(OMP_EXE): $(OMP_SRC) | $(BIN_DIR)
-	$(CXX) $(CXXFLAGS) $(OMPFLAGS) -o $@ $<
-
-# Versão paralela (CUDA)
-$(CUDA_EXE): $(CUDA_SRC) | $(BIN_DIR)
-	$(NVCC) $(CUDAFLAGS) -o $@ $<
-
-# ====================================
-# Limpeza
-# ====================================
+# Clean build files
 clean:
-	rm -rf $(BIN_DIR)
+	rm -rf $(OBJ_DIR) $(BIN_DIR)
+
+.PHONY: all clean prepare
 
 # ====================================
-# Execução rápida (com parâmetros)
+# Execução rápida
 # ====================================
-run-seq: $(SEQ_EXE)
-	./$(SEQ_EXE) $(ARGS)
+run: $(TARGET)
+	./$(TARGET) $(ARGS)
 
-run-omp: $(OMP_EXE)
-	./$(OMP_EXE) $(ARGS)
-
-run-cuda: $(CUDA_EXE)
-	./$(CUDA_EXE) $(ARGS)
-
-# ====================================
-# Instruções
-# ====================================
-# Compilar todas as versões  → make
-# Rodar versão sequencial    → make run-seq ARGS="data/points.txt 3"
-# Rodar versão OpenMP        → make run-omp ARGS="data/points.txt 3"
-# Rodar versão CUDA          → make run-cuda ARGS="data/points.txt 3"
-# Limpar binários            → make clean
+# ==================================== 
+# Instruções 
+# ==================================== 
+# Compilar todas as versões → make 
+# Rodar versão sequencial e OpenMP → make run ARGS="data/housing.csv 6" 
+# Limpar binários → make clean
