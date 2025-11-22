@@ -158,7 +158,7 @@ int main(int argc, char* argv[]) {
             vector<Point> pts_omp = points;
 
             start_time = CycleTimer::currentSeconds();
-            kmeans_omp(pts_omp, initial_centroids, 100);
+            kmeans_omp(pts_omp, initial_centroids, 200);
             end_time = CycleTimer::currentSeconds();
 
             min_omp = min(min_omp, end_time - start_time);
