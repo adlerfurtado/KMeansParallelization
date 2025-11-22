@@ -24,41 +24,14 @@ vector<Point> read_points(const string& filename, int colX=0, int colY=1) {
         exit(1);
     }
 
-    // double x, y;
-    // while (file >> x >> y) {
-    //     points.push_back({x, y, -1});
-    // }
+    double x, y;
+    while (file >> x >> y) {
+        points.push_back({x, y, -1});
+    }
 
-    // if (points.empty()) {
-    //     cerr << "Nenhum ponto encontrado no arquivo." << endl;
-    //     exit(1);
-    // }
-
-    string line;
-    bool header = true;
-
-    while (getline(file, line)) {
-        if (header) { // Se quiser pular cabeçalho
-            header = false;
-            continue;
-        }
-
-        stringstream ss(line);
-        string value;
-        vector<string> row;
-
-        // Divide linha por vírgulas
-        while (getline(ss, value, ',')) {
-            row.push_back(value);
-        }
-
-        if (row.size() > max(colX, colY)) {
-            Point p;
-            p.x = stod(row[colX]);
-            p.y = stod(row[colY]);
-            p.cluster = -1;
-            points.push_back(p);
-        }
+    if (points.empty()) {
+        cerr << "Nenhum ponto encontrado no arquivo." << endl;
+        exit(1);
     }
 
     file.close();
@@ -98,25 +71,31 @@ int main(int argc, char* argv[]) {
     double start_time, end_time;
 
     // Executa versão sequencial 3 vezes e reporta o mínimo
-    double min_serial = 1e30;
+    double min_serial = INFINITY;
     cout << "Executando versão sequencial.\n";
     for (int i = 0; i < 3; ++i) {
-        start_time = CycleTimer::currentSeconds();
+        // start_time = CycleTimer::currentSeconds();
+        clock_t start_seq = clock();
         results_seq = kmeans_seq(points, initial_centroids, 100);
-        end_time = CycleTimer::currentSeconds();
+        clock_t end_seq = clock();
+        // end_time = CycleTimer::currentSeconds();
         
-        min_serial = min(min_serial, end_time - start_time);
+        // min_serial = min(min_serial, end_time - start_time);
+        min_serial = min(min_serial, double(end_seq - start_seq) / CLOCKS_PER_SEC);
     }
 
     // Executa versão OpenMP 3 vezes e reporta o mínimo
-    double min_omp = 1e30;
+    double min_omp = INFINITY;
     cout << "Executando versão OpenMP com " << num_threads << " threads\n";
     for (int i = 0; i < 3; ++i) {
-        start_time = CycleTimer::currentSeconds();
+        // start_time = CycleTimer::currentSeconds();
+        double start_omp = omp_get_wtime();
         results_omp = kmeans_seq(points, initial_centroids, 100);
-        end_time = CycleTimer::currentSeconds();
+        double end_omp = omp_get_wtime();
+        // end_time = CycleTimer::currentSeconds();
 
-        min_omp = min(min_omp, end_time - start_time);
+        // min_omp = min(min_omp, end_time - start_time);
+        min_omp = min(min_omp, end_omp - start_omp);
     }
 
     // Testa corretude dos algoritmos
