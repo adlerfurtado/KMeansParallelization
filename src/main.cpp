@@ -14,7 +14,9 @@
 
 using namespace std;
 
-// Função para ler pontos de um arquivo
+// ------------------------------------------------------------
+// Lê pontos do arquivo
+// ------------------------------------------------------------
 vector<Point> read_points(const string& filename, int colX=0, int colY=1) {
     vector<Point> points;
     ifstream file(filename);
@@ -38,26 +40,38 @@ vector<Point> read_points(const string& filename, int colX=0, int colY=1) {
     return points;
 }
 
+// ============================================================
+// MAIN
+// ============================================================
 int main(int argc, char* argv[]) {
-    
-    int  num_threads = -1;
+
+    bool run_benchmark = false;
+    int num_threads = -1;
 
     if (argc < 3) {
-        cout << "Uso: ./kmeans_seq <arquivo_dados> <k> [num_threads]\n";
-        cout << "Exemplo: ./kmeans_seq data/points.txt 3 [num_threads]\n";
+        cout << "Uso: ./kmeans <arquivo_dados> <k> [--threads N]\n";
+        cout << "Se --threads não for usado, roda benchmark automático.\n";
         return 1;
     }
 
-    if (argc == 4) {
-        num_threads = atoi(argv[3]);
-    } else {
-        num_threads = omp_get_max_threads();
-    }
-
-    omp_set_num_threads(num_threads);
-
     string filename = argv[1];
     int k = stoi(argv[2]);
+
+    // ------------------------------------------------------------
+    // Interpretar argumentos
+    // ------------------------------------------------------------
+    if (argc == 5) {
+        string flag = argv[3];
+        if (flag == "--threads") {
+            num_threads = atoi(argv[4]);
+        } else {
+            cerr << "Argumento desconhecido: " << flag << endl;
+            return 1;
+        }
+    } else {
+        // Nenhum número de threads → entra no modo benchmark
+        run_benchmark = true;
+    }
 
     srand(time(NULL));
 
@@ -70,62 +84,98 @@ int main(int argc, char* argv[]) {
 
     double start_time, end_time;
 
-    // Executa versão sequencial 3 vezes e reporta o mínimo
+    // =============================================================
+    // RODAR VERSÃO SEQUENCIAL (sempre faz uma vez antes do benchmark)
+    // =============================================================
     double min_serial = INFINITY;
-    cout << "Executando versão sequencial.\n";
-    for (int i = 0; i < 3; ++i) {
-        // start_time = CycleTimer::currentSeconds();
-        clock_t start_seq = clock();
-        results_seq = kmeans_seq(points, initial_centroids, 100);
-        clock_t end_seq = clock();
-        // end_time = CycleTimer::currentSeconds();
-        
-        // min_serial = min(min_serial, end_time - start_time);
-        min_serial = min(min_serial, double(end_seq - start_seq) / CLOCKS_PER_SEC);
+    cout << "Executando versão sequencial (baseline)...\n";
+
+    for (int i = 0; i < 3; i++) {
+        vector<Point> pts_seq = points;
+
+        start_time = CycleTimer::currentSeconds();
+        results_seq = kmeans_seq(pts_seq, initial_centroids, 200);
+        end_time = CycleTimer::currentSeconds();
+
+        min_serial = min(min_serial, end_time - start_time);
     }
 
-    // Executa versão OpenMP 3 vezes e reporta o mínimo
-    double min_omp = INFINITY;
-    cout << "Executando versão OpenMP com " << num_threads << " threads\n";
-    for (int i = 0; i < 3; ++i) {
-        // start_time = CycleTimer::currentSeconds();
-        double start_omp = omp_get_wtime();
-        results_omp = kmeans_seq(points, initial_centroids, 100);
-        double end_omp = omp_get_wtime();
-        // end_time = CycleTimer::currentSeconds();
+    cout << "Tempo sequencial mínimo: " << min_serial*1000 << " ms\n\n";
 
-        // min_omp = min(min_omp, end_time - start_time);
-        min_omp = min(min_omp, end_omp - start_omp);
-    }
+    // =============================================================
+    // SE MODO NORMAL COM --threads N
+    // =============================================================
+    if (!run_benchmark) {
 
-    // Testa corretude dos algoritmos
-    sort(results_seq.begin(), results_seq.end());
-    sort(results_omp.begin(), results_omp.end());
+        omp_set_num_threads(num_threads);
+        cout << "Executando versão OpenMP com " << num_threads << " threads\n";
 
-    if (results_seq.size() == results_omp.size() && 
-        equal(results_seq.begin(), results_seq.end(), results_omp.begin())) {
-        cout << "Algoritmos corretos.\n";
-    } else {
-        cout << "Resultados divergiram.\n";
+        double min_omp = INFINITY;
+        for (int i = 0; i < 3; i++) {
+            vector<Point> pts_omp = points;
 
-        cout << "Centróides (Sequencial):\n";
-        for (int j = 0; j < k; ++j) {
-            cout << "(" << results_seq[j].x << ", " << results_seq[j].y << ")  ";
+            start_time = CycleTimer::currentSeconds();
+            results_omp = kmeans_omp(pts_omp, initial_centroids, 200);
+            end_time = CycleTimer::currentSeconds();
+
+            min_omp = min(min_omp, end_time - start_time);
         }
-        cout << endl;
 
-        cout << "Centróides (OpenMP):\n";
-        for (int j = 0; j < k; ++j) {
-            cout << "(" << results_omp[j].x << ", " << results_omp[j].y << ")  ";
-        }
-        cout << endl;
+        double speedup = min_serial / min_omp;
+
+        printf("Tempo total versão OpenMP: \t[%.3f] ms\n", min_omp * 1000);
+        printf("\t\t\t\t(%.2fx speedup from OpenMP)\n", speedup);
+        return 0;
     }
 
-    double speedup = min_serial / min_omp;
-    printf("Tempo total versão Sequencial: \t[%.3f] ms\n", min_serial * 1000);
-    printf("Tempo total versão OpenMP: \t[%.3f] ms\n", min_omp * 1000);
-    printf("\t\t\t\t(%.2fx speedup from OpenMP)\n", speedup);
+    // =============================================================
+    // =============================================================
+    //                MODO BENCHMARK AUTOMÁTICO
+    // =============================================================
+    // =============================================================
 
-    // para compilar: g++ -I../ -std=c++11 -fopenmp -O3 -g -o kmeans  main.cpp common.cpp
+    cout << "==================== MODO BENCHMARK ====================\n";
+
+    int max_hw_threads = omp_get_max_threads();
+
+    vector<int> thread_list = {1, 2, 4, 8};
+    if (max_hw_threads > 8) thread_list.push_back(max_hw_threads);
+    else if (find(thread_list.begin(), thread_list.end(), max_hw_threads) == thread_list.end())
+        thread_list.push_back(max_hw_threads);
+
+    double best_speedup = 0.0;
+    int best_t = 1;
+
+    for (int t : thread_list) {
+        if (t > max_hw_threads) continue;
+
+        omp_set_num_threads(t);
+        cout << "\n--- Testando com " << t << " threads ---\n";
+
+        double min_omp = INFINITY;
+
+        for (int i = 0; i < 3; i++) {
+            vector<Point> pts_omp = points;
+
+            start_time = CycleTimer::currentSeconds();
+            kmeans_omp(pts_omp, initial_centroids, 100);
+            end_time = CycleTimer::currentSeconds();
+
+            min_omp = min(min_omp, end_time - start_time);
+        }
+
+        double speedup = min_serial / min_omp;
+
+        printf("OpenMP %2d threads: %.3f ms  | speedup %.2fx\n",
+               t, min_omp * 1000, speedup);
+
+        if (speedup > best_speedup) {
+            best_speedup = speedup;
+            best_t = t;
+        }
+    }
+
+    printf("\n>>> Melhor configuração: %d threads (%.2fx speedup)\n", best_t, best_speedup);
+
     return 0;
 }
