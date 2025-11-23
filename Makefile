@@ -20,6 +20,7 @@ SRC = $(SRC_DIR)/main.cpp \
 OBJ = $(addprefix $(OBJ_DIR)/, $(notdir $(SRC:.cpp=.o)))
 # CUDA object
 OBJ_CU = $(OBJ_DIR)/kmeans_cuda.o
+OBJ_RUN = $(OBJ_DIR)/run_both.o
 
 # Executable
 TARGET = $(BIN_DIR)/kmeans
@@ -45,6 +46,15 @@ else
 $(BIN_DIR)/kmeans_cuda:
 	@echo "nvcc not found -- CUDA target skipped"
 
+endif
+
+# Executable that runs both OpenMP and CUDA and prints organized result
+ifneq ($(NVCC),)
+$(BIN_DIR)/run_both: $(OBJ_CU) $(OBJ_RUN) $(OBJ_DIR)/kmeans_omp.o $(OBJ_DIR)/common.o $(OBJ_DIR)/kmeans_seq.o
+	$(NVCC) $(NVCCFLAGS) -Xcompiler -fopenmp -o $@ $^
+else
+$(BIN_DIR)/run_both:
+	@echo "nvcc not found -- run_both unavailable"
 endif
 
 # Compile object files into obj/

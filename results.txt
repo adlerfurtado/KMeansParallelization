@@ -1,0 +1,11 @@
+Carregando pontos de: data/random_10000.txt
+
+================== RESUMO ==================
+Metodo      Threads   Tempo (ms)      Speedup     Corretude
+------------------------------------------------------------
+Sequencial  -         9.64091         1.00        OK
+OpenMP      1         11.10           0.87        OK
+OpenMP      2         8.96            1.08        OK
+OpenMP      4         5.36            1.80        OK
+OpenMP      8         3.57            2.70        OK
+CUDA        -         330.85          0.03        OK

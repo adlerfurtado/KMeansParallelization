@@ -34,5 +34,6 @@ double distance(const Point& a, const Centroid& b);
 vector<Centroid> initialize_centroids(const vector<Point>& points, int k);
 vector<Centroid> kmeans_seq(vector<Point>& points, vector<Centroid>& centroids, int max_iters);
 vector<Centroid> kmeans_omp(vector<Point>& points, vector<Centroid>& centroids, int max_iters);
+vector<Centroid> kmeans_cuda(vector<Point>& points, vector<Centroid>& centroids, int max_iters);
 
 #endif
