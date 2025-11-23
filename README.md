@@ -70,5 +70,3 @@ Notes & troubleshooting
 - If `nvcc` is not found the Makefile will skip CUDA targets and still build the CPU/OpenMP binaries.
 - Input format: plain text file with `x y` coordinates per line. Files in `data/` follow this format.
 - There are small helper programs & tests in `src/` — the `run_both` runner was added to simplify side‑by‑side comparisons.
-
-If you want, I can add a JSON/CSV output option for `run_both` so results are easy to parse programmatically.
