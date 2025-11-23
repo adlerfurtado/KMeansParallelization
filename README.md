@@ -52,9 +52,9 @@ python3 generate_points.py 1000
 - Run sequential + OpenMP benchmark + CUDA:
 
 ```bash
-make bin/run_both
+make
 
-bin/run_both data/random_10000.txt 3 
+./bin/run_both data/random_1000000.txt 3
 # with the archive (random_10000.txt) and number of clusters K (3)
 ```
 
