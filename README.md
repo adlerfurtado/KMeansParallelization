@@ -20,4 +20,6 @@ This will create these executables:
 
 make run-seq ARGS="data/points.txt 3"
 
-(I'm using this command for now beacuse i'm testing with 3 clusters)
+4. Run the Cuda version 
+
+make run-cuda ARGS="data/points.txt 3"
