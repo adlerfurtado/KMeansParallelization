@@ -11,138 +11,183 @@
 #include "common.h"
 #include "CycleTimer.h"
 
+#include <cuda_runtime.h>
+
 using namespace std;
 
 vector<Point> read_points(const string& filename) {
     vector<Point> points;
     ifstream file(filename);
     if (!file.is_open()) {
-        cerr << "Erro ao abrir o arquivo: " << filename << endl;
+        cerr << "Erro ao abrir arquivo: " << filename << endl;
         exit(1);
     }
-    double x,y;
+    double x, y;
     while (file >> x >> y) points.push_back({x,y,-1});
-    if (points.empty()) { cerr << "Nenhum ponto encontrado." << endl; exit(1); }
+    if (points.empty()) {
+        cerr << "Nenhum ponto encontrado.\n";
+        exit(1);
+    }
     return points;
+}
+
+void check_gpu() {
+    int count = 0;
+    cudaGetDeviceCount(&count);
+
+    if (count == 0) {
+        cerr << "\nERRO: Nenhuma GPU CUDA encontrada!\n";
+        exit(1);
+    }
+
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, 0);
+
+    cout << "GPU Detectada: " << prop.name
+         << "  (Compute Capability " << prop.major << "." << prop.minor << ")\n";
 }
 
 int main(int argc, char** argv) {
     if (argc < 3) {
-        cout << "Uso: run_both <arquivo> <k> [threads_comma_separated]\n";
-        cout << "Exemplo: run_both data/random_100.txt 3 1,2,4,8\n";
+        cout << "Uso: run_both <arquivo> <k> [threads_comma]\n";
         return 1;
     }
+
+    check_gpu();
 
     string filename = argv[1];
     int k = stoi(argv[2]);
 
-    // default thread list
     vector<int> thread_list = {1,2,4,8};
     if (argc >= 4) {
-        // parse comma separated list
         thread_list.clear();
         string s = argv[3];
         size_t pos = 0;
         while (pos < s.size()) {
             size_t comma = s.find(',', pos);
             if (comma == string::npos) comma = s.size();
-            int t = stoi(s.substr(pos, comma - pos));
-            thread_list.push_back(t);
+            thread_list.push_back(stoi(s.substr(pos, comma-pos)));
             pos = comma + 1;
         }
     }
 
-    srand(time(NULL));
-
-    cout << "Carregando pontos de: " << filename << "\n";
+    cout << "Carregando pontos...\n";
     vector<Point> points = read_points(filename);
-    vector<Centroid> initial_centroids = initialize_centroids(points, k);
 
-    // --- Sequencial (baseline): executar 3x e pegar mínimo
-    double best_seq = INFINITY;
-    vector<Centroid> res_seq;
-    for (int i=0;i<3;i++) {
-        vector<Point> pts = points;
+    vector<Centroid> initial = initialize_centroids(points, k);
+
+    struct R { string name; int th; double t; vector<Centroid> c; bool ok; };
+    vector<R> results;
+
+    // ===========================
+    // SEQUENCIAL
+    // ===========================
+
+    double best_seq = 1e30;
+    vector<Centroid> seq_best;
+
+    for (int i = 0; i < 3; i++) {
+        vector<Point> copy = points;
         double t0 = CycleTimer::currentSeconds();
-        vector<Centroid> r = kmeans_seq(pts, initial_centroids, 200);
+        auto r = kmeans_seq(copy, initial, 200);
         double t1 = CycleTimer::currentSeconds();
-        if (t1 - t0 < best_seq) {
-            best_seq = t1 - t0;
-            res_seq = r;
+        if (t1-t0 < best_seq) {
+            best_seq = t1-t0;
+            seq_best = r;
         }
     }
-    sort(res_seq.begin(), res_seq.end());
+    sort(seq_best.begin(), seq_best.end());
+    results.push_back({"Sequencial",0,best_seq,seq_best,true});
 
-    struct Result { string name; int threads; double time_s; vector<Centroid> cent; bool matches_seq; };
-    vector<Result> results;
 
-    // push sequential result
-    results.push_back({"Sequencial", 0, best_seq, res_seq, true});
+    // ===========================
+    // OPENMP
+    // ===========================
 
-    // --- OpenMP: para cada t na lista, executar 3x e pegar mínimo
-    int max_hw = omp_get_max_threads();
-    for (int t : thread_list) {
-        if (t <= 0) continue;
-        if (t > max_hw) continue;
+    for (int th : thread_list) {
+        double best = 1e30;
+        vector<Centroid> bestc;
 
-        omp_set_num_threads(t);
-        double best = INFINITY;
-        vector<Centroid> best_cent;
+        omp_set_num_threads(th);
+
+        for (int i = 0; i < 3; i++) {
+            vector<Point> copy = points;
+            double t0 = CycleTimer::currentSeconds();
+            auto r = kmeans_omp(copy, initial, 200);
+            double t1 = CycleTimer::currentSeconds();
+            if (t1-t0 < best) {
+                best = t1-t0;
+                bestc = r;
+            }
+        }
+
+        sort(bestc.begin(), bestc.end());
+        bool ok = (bestc == seq_best);
+
+        results.push_back({"OpenMP",th,best,bestc,ok});
+    }
+
+
+    // ===========================
+    // CUDA
+    // ===========================
+
+
+
+
+
+        // --- CUDA (double-atomic original) - optional: run if desired
+        // (skipped here since we'll run float and block-reduce variants instead)
+
+        // --- CUDA (float-sum atomic) - quick test
+        double best_cuda_float = INFINITY;
+        vector<Centroid> best_cuda_float_cent;
         for (int i=0;i<3;i++) {
             vector<Point> pts = points;
             double t0 = CycleTimer::currentSeconds();
-            vector<Centroid> r = kmeans_omp(pts, initial_centroids, 200);
+            vector<Centroid> r = kmeans_cuda_float(pts, initial, 200);
             double t1 = CycleTimer::currentSeconds();
-            if (t1 - t0 < best) { best = t1 - t0; best_cent = r; }
+            if (t1 - t0 < best_cuda_float) { best_cuda_float = t1 - t0; best_cuda_float_cent = r; }
         }
-        sort(best_cent.begin(), best_cent.end());
-        bool match = (best_cent.size() == res_seq.size() && std::equal(best_cent.begin(), best_cent.end(), res_seq.begin()));
-        results.push_back({"OpenMP", t, best, best_cent, match});
-    }
+        sort(best_cuda_float_cent.begin(), best_cuda_float_cent.end());
+        bool cuda_float_matches = (best_cuda_float_cent == seq_best);
+        results.push_back({"CUDA_float", 0, best_cuda_float, best_cuda_float_cent, cuda_float_matches});
 
-    // --- CUDA: executar 3x e pegar mínimo
-    double best_cuda = INFINITY;
-    vector<Centroid> best_cuda_cent;
-    for (int i=0;i<3;i++) {
-        vector<Point> pts = points;
-        double t0 = CycleTimer::currentSeconds();
-        vector<Centroid> r = kmeans_cuda(pts, initial_centroids, 200);
-        double t1 = CycleTimer::currentSeconds();
-        if (t1 - t0 < best_cuda) { best_cuda = t1 - t0; best_cuda_cent = r; }
-    }
-    sort(best_cuda_cent.begin(), best_cuda_cent.end());
-    bool cuda_matches = (best_cuda_cent.size() == res_seq.size() && std::equal(best_cuda_cent.begin(), best_cuda_cent.end(), res_seq.begin()));
-    results.push_back({"CUDA", 0, best_cuda, best_cuda_cent, cuda_matches});
+        // --- CUDA (block-reduction) - reduced atomics
+        double best_cuda_block = INFINITY;
+        vector<Centroid> best_cuda_block_cent;
+        for (int i=0;i<3;i++) {
+            vector<Point> pts = points;
+            double t0 = CycleTimer::currentSeconds();
+            vector<Centroid> r = kmeans_cuda_blockreduce(pts, initial, 200);
+            double t1 = CycleTimer::currentSeconds();
+            if (t1 - t0 < best_cuda_block) { best_cuda_block = t1 - t0; best_cuda_block_cent = r; }
+        }
+        sort(best_cuda_block_cent.begin(), best_cuda_block_cent.end());
+        bool cuda_block_matches = (best_cuda_block_cent == seq_best);
+        results.push_back({"CUDA_block", 0, best_cuda_block, best_cuda_block_cent, cuda_block_matches});
 
-    // --- Imprimir resumo organizado
+    // ===========================
+    // PRINT
+    // ===========================
+
     cout << "\n================== RESUMO ==================\n";
-    cout << left << setw(12) << "Metodo" << setw(10) << "Threads" << setw(16) << "Tempo (ms)" << setw(12) << "Speedup" << "Corretude" << "\n";
-    cout << string(60, '-') << "\n";
+    cout << left << setw(12) << "Metodo"
+         << setw(10) << "Threads"
+         << setw(14) << "Tempo(ms)"
+         << setw(10) << "Speedup"
+         << "Corretude\n";
 
-    double base = results[0].time_s;
+    double base = best_seq;
+
     for (auto &r : results) {
-        double speed = (r.time_s > 0) ? base / r.time_s : 0.0;
-        string corr = r.matches_seq ? "OK" : "DIFFER";
-        string thr = (r.name == "OpenMP") ? to_string(r.threads) : "-";
-        cout << left << setw(12) << r.name << setw(10) << thr << setw(16) << (r.time_s*1000.0) << setw(12) << fixed << setprecision(2) << speed << corr << "\n";
-    }
-
-    // Se houver divergências, mostrar centróides para investigação
-    bool any_div = false;
-    for (auto &r : results) if (!r.matches_seq) any_div = true;
-    if (any_div) {
-        cout << "\n-- Detalhes (centróides) --\n";
-        cout << "Sequencial:\n";
-        for (auto &c : res_seq) cout << "(" << c.x << "," << c.y << ") ";
-        cout << "\n";
-        for (auto &r : results) {
-            if (r.name == "Sequencial") continue;
-            if (!r.matches_seq) {
-                cout << r.name << " (threads=" << (r.threads>0?to_string(r.threads):string("-")) << "):\n";
-                for (auto &c : r.cent) cout << "(" << c.x << "," << c.y << ") ";
-                cout << "\n";
-            }
-        }
+        string th = (r.name=="OpenMP") ? to_string(r.th) : "-";
+        string ok = r.ok ? "OK" : "DIFF";
+        cout << left << setw(12) << r.name
+             << setw(10) << th
+             << setw(14) << r.t * 1000
+             << setw(10) << base / r.t
+             << ok << "\n";
     }
 
     return 0;

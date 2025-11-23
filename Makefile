@@ -1,99 +1,87 @@
-# Compiler and flags
+# =====================================================
+# COMPILADORES
+# =====================================================
+
 CXX = g++
 CXXFLAGS = -O3 -Wall -fopenmp -std=c++17
 
-# CUDA (future support)
 NVCC := $(shell which nvcc 2>/dev/null)
-# nvcc nem sempre suporta c++17 conforme a versão instalada; usar c++14 é mais compatível
-NVCCFLAGS = -O3 -std=c++14
+NVCCFLAGS = -O3 -std=c++14 -Xcompiler -fopenmp
 
-# Directories
+# =====================================================
+# DIRETÓRIOS
+# =====================================================
+
 SRC_DIR = src
 OBJ_DIR = obj
 BIN_DIR = bin
 
-# Sources and objects
-SRC = $(SRC_DIR)/main.cpp \
-      $(SRC_DIR)/kmeans_seq.cpp \
-      $(SRC_DIR)/kmeans_omp.cpp \
-      $(SRC_DIR)/common.cpp
-OBJ = $(addprefix $(OBJ_DIR)/, $(notdir $(SRC:.cpp=.o)))
-# CUDA object
-OBJ_CU = $(OBJ_DIR)/kmeans_cuda.o
-OBJ_RUN = $(OBJ_DIR)/run_both.o
+# =====================================================
+# FONTES
+# =====================================================
 
-# Executable
-TARGET = $(BIN_DIR)/kmeans
+CPP_MAIN = $(SRC_DIR)/main.cpp \
+           $(SRC_DIR)/kmeans_seq.cpp \
+           $(SRC_DIR)/kmeans_omp.cpp \
+           $(SRC_DIR)/common.cpp
 
-# Default rule
-all: prepare $(TARGET)
+CPP_RUN = $(SRC_DIR)/run_both.cpp \
+          $(SRC_DIR)/kmeans_seq.cpp \
+          $(SRC_DIR)/kmeans_omp.cpp \
+          $(SRC_DIR)/common.cpp
 
-# Create directories if not exist
+OBJ_MAIN = $(addprefix $(OBJ_DIR)/, $(notdir $(CPP_MAIN:.cpp=.o)))
+OBJ_RUN  = $(addprefix $(OBJ_DIR)/, $(notdir $(CPP_RUN:.cpp=.o)))
+
+CUDA_OBJ = $(OBJ_DIR)/kmeans_cuda.o
+
+# =====================================================
+# ALVO PADRÃO
+# =====================================================
+
+all: prepare $(BIN_DIR)/run_both
+
 prepare:
 	mkdir -p $(OBJ_DIR) $(BIN_DIR)
 
-# Link
-$(TARGET): $(OBJ)
-	$(CXX) $(CXXFLAGS) -o $@ $^
+# =====================================================
+# COMPILAÇÃO CPU
+# =====================================================
 
-# CUDA rules: somente se nvcc estiver disponível; caso contrário, alvos informativos
-ifneq ($(NVCC),)
-# CUDA executable (built with nvcc to link CUDA runtime)
-$(BIN_DIR)/kmeans_cuda: $(OBJ) $(OBJ_CU)
-	$(NVCC) $(NVCCFLAGS) -Xcompiler -fopenmp -o $@ $^
-
-else
-$(BIN_DIR)/kmeans_cuda:
-	@echo "nvcc not found -- CUDA target skipped"
-
-endif
-
-# Executable that runs both OpenMP and CUDA and prints organized result
-ifneq ($(NVCC),)
-$(BIN_DIR)/run_both: $(OBJ_CU) $(OBJ_RUN) $(OBJ_DIR)/kmeans_omp.o $(OBJ_DIR)/common.o $(OBJ_DIR)/kmeans_seq.o
-	$(NVCC) $(NVCCFLAGS) -Xcompiler -fopenmp -o $@ $^
-else
-$(BIN_DIR)/run_both:
-	@echo "nvcc not found -- run_both unavailable"
-endif
-
-# Compile object files into obj/
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp src/common.h src/CycleTimer.h
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-ifneq ($(NVCC),)
-# regra para compilar CUDA source
-$(OBJ_DIR)/kmeans_cuda.o: $(SRC_DIR)/kmeans_cuda.cu
-	$(NVCC) $(NVCCFLAGS) -Iinclude -c $< -o $@
-else
-$(OBJ_DIR)/kmeans_cuda.o:
-	@echo "nvcc not found -- skipping CUDA object build"
+# =====================================================
+# COMPILAÇÃO CUDA
+# =====================================================
+
+ifeq ($(NVCC),)
+$(error "ERRO: nvcc não encontrado! Instale CUDA toolkit.")
 endif
 
-# Clean build files
+$(OBJ_DIR)/kmeans_cuda.o: $(SRC_DIR)/kmeans_cuda.cu
+	$(NVCC) $(NVCCFLAGS) -c $< -o $@
+
+# =====================================================
+# EXECUTÁVEL NORMAL (usa main.cpp)
+# =====================================================
+
+$(BIN_DIR)/kmeans: $(OBJ_MAIN)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+# =====================================================
+# EXECUTÁVEL run_both (USA nvcc e NÃO inclui main.cpp)
+# =====================================================
+
+$(BIN_DIR)/run_both: $(OBJ_RUN) $(CUDA_OBJ)
+	$(NVCC) $(NVCCFLAGS) -o $@ $^
+
+# =====================================================
+# COMANDOS
+# =====================================================
+
+run:
+	./$(BIN_DIR)/run_both $(ARGS)
+
 clean:
 	rm -rf $(OBJ_DIR) $(BIN_DIR)
-
-.PHONY: all clean prepare
-
-# ====================================
-# Execução rápida
-# ====================================
-run: $(TARGET)
-	./$(TARGET) $(ARGS)
-
-# Run CUDA build
-ifneq ($(NVCC),)
-run-cuda: $(BIN_DIR)/kmeans_cuda
-	./$(BIN_DIR)/kmeans_cuda $(ARGS)
-else
-run-cuda:
-	@echo "nvcc not found -- cannot run CUDA build (install CUDA toolkit to enable)"
-endif
-
-# ==================================== 
-# Instruções 
-# ==================================== 
-# Compilar todas as versões → make 
-# Rodar versão sequencial e OpenMP → make run ARGS="data/housing.csv 6" 
-# Limpar binários → make clean

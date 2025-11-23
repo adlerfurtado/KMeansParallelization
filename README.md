@@ -85,4 +85,10 @@ Notes & troubleshooting
 
 If you want, I can add a JSON/CSV output option for `run_both` so results are easy to parse programmatically.
 
+<<<<<<< HEAD
 ```
+=======
+4. Run the Cuda version 
+
+make run-cuda ARGS="data/points.txt 3"
+>>>>>>> 3ac57eac291152a7077721f25d112bb0d81c132d

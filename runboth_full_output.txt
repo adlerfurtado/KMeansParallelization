@@ -1,0 +1,11 @@
+GPU Detectada: NVIDIA GeForce GTX 1650  (Compute Capability 7.5)
+Carregando pontos...
+
+================== RESUMO ==================
+Metodo      Threads   Tempo(ms)     Speedup   Corretude
+Sequencial  -         1.54258       1         OK
+OpenMP      1         1.68833       0.913668  OK
+OpenMP      2         2.75193       0.560544  OK
+OpenMP      4         0.784509      1.9663    OK
+OpenMP      8         0.471874      3.26905   OK
+CUDA        -         73.4513       0.0210014 OK
