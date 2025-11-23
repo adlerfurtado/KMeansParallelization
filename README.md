@@ -1,16 +1,4 @@
 # K-Means-Parallelization
-K-Means is an unsupervised machine learning algorithm that groups data into K clusters. It iteratively assigns points to the nearest centroid and recalculates centroids until convergence. Though simple, it becomes computationally expensive for large datasets, making it ideal for parallelization studies.
-
-How to use:
-1. Clone the project and navegate to the directory
-
-cd KMeansParallelization
-
-2. Build all versions
-Compile all implementations (Sequential, OpenMP, and CUDA):
-
-```markdown
-# K-Means-Parallelization
 
 This repository implements the K-Means clustering algorithm with multiple implementations to compare correctness and performance:
 
